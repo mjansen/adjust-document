@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module PPM.P6 where
 
 -- P6
@@ -11,6 +13,7 @@ module PPM.P6 where
 -- import Data.Sequence
 
 import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString       as B
 import qualified Data.Attoparsec.ByteString.Char8 as P
 
 import System.FilePath
@@ -20,7 +23,7 @@ data P6 = P6
   { ppm_width  :: Int
   , ppm_height :: Int
   , ppm_depth  :: Int  -- shades of gray
-  , ppm_data   :: BC.ByteString
+  , ppm_data   :: B.ByteString
   }
 
 instance Show P6 where
@@ -41,18 +44,18 @@ parseP6 = do
 
 readP6 :: FilePath -> IO (Maybe P6)
 readP6 fileName = do
-  content <- BC.readFile fileName
+  content <- B.readFile fileName
   case P.parseOnly parseP6 content of
     Left msg -> print msg >> return Nothing
     Right x  -> return . Just $ x
 
-unparseP6 :: P6 -> BC.ByteString
+unparseP6 :: P6 -> B.ByteString
 unparseP6 (P6 w h d c) =
   let header = "P6\n" ++ show w ++ " " ++ show h ++ "\n" ++ show d ++ "\n"
-  in BC.append (BC.pack header) c
+  in B.append (BC.pack header) c
 
 writeP6 :: FilePath -> P6 -> IO ()
-writeP6 fileName = BC.writeFile fileName . unparseP6
+writeP6 fileName = B.writeFile fileName . unparseP6
 
 writeP6toPNG :: FilePath -> P6 -> IO ()
 writeP6toPNG fileName x = do
@@ -63,23 +66,23 @@ writeP6toPNG fileName x = do
 toLines :: P6 -> [P6]
 toLines (P6 w h d c) = map takeLine [0..h - 1]
   where
-    takeLine k = P6 w 1 d (BC.take (3*w) . BC.drop (3*w*k) $ c)
+    takeLine k = P6 w 1 d (B.take (3*w) . B.drop (3*w*k) $ c)
 
 fromLines :: [P6] -> P6
-fromLines rs@((P6 w 1 d c):_) = P6 w (length rs) d (BC.concat . map ppm_data $ rs)
+fromLines rs@((P6 w 1 d c):_) = P6 w (length rs) d (B.concat . map ppm_data $ rs)
 
 isWhite :: P6 -> Bool
-isWhite (P6 w h d c) = BC.all (== toEnum 255) c
+isWhite (P6 w h d c) = B.all (== 255) c
 
 whiteOnLeft :: P6 -> Int
 whiteOnLeft (P6 w h d c) =
-  let tmp = BC.takeWhile (== toEnum 255) c
-  in BC.length tmp `quot` 3
+  let tmp = B.takeWhile (== 255) c
+  in B.length tmp `quot` 3
 
 whiteOnRight :: P6 -> Int
 whiteOnRight (P6 w h d c) =
-  let tmp = BC.takeWhile (== toEnum 255) . BC.reverse $ c
-  in BC.length tmp `quot` 3
+  let tmp = B.takeWhile (== 255) . B.reverse $ c
+  in B.length tmp `quot` 3
 
 cropWhiteSpace :: P6 -> P6
 cropWhiteSpace x =
@@ -93,5 +96,7 @@ cropWhiteSpace x =
   in fromLines . map (cropTo lm rm) $ xs
 
 cropTo :: Int -> Int -> P6 -> P6
-cropTo lm rm (P6 w 1 255 c) = P6 (w - lm - rm) 1 255 (BC.take (3*(w - lm - rm)) . BC.drop (3*lm) $ c)
+cropTo lm rm (P6 w 1 255 c) = P6 (w - lm - rm) 1 255 (B.take (3*(w - lm - rm)) . B.drop (3*lm) $ c)
 
+invertColour :: P6 -> P6
+invertColour (P6 w h d c) = P6 w h d (B.map (255 -) c)
